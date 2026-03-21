@@ -58,6 +58,8 @@ import {
   shouldDropMessage,
 } from './sender-allowlist.js';
 import { startSchedulerLoop } from './task-scheduler.js';
+import { createTvOnlyPlaceholderChannel } from './channels/tvclaw-tv-only.js';
+import { getTvManager } from './services/tv-manager.js';
 import { Channel, NewMessage, RegisteredGroup } from './types.js';
 import { logger } from './logger.js';
 
@@ -483,9 +485,12 @@ async function main(): Promise<void> {
     PROXY_BIND_HOST,
   );
 
+  getTvManager().start();
+
   // Graceful shutdown handlers
   const shutdown = async (signal: string) => {
     logger.info({ signal }, 'Shutdown signal received');
+    getTvManager().stop();
     proxyServer.close();
     await queue.shutdown(10000);
     for (const ch of channels) await ch.disconnect();
@@ -593,8 +598,12 @@ async function main(): Promise<void> {
     await channel.connect();
   }
   if (channels.length === 0) {
-    logger.fatal('No channels connected');
-    process.exit(1);
+    logger.warn(
+      'No messaging channels — TV-only mode (POST /tv, mDNS). For WhatsApp, merge /add-whatsapp and uncomment the channel in src/channels/index.ts',
+    );
+    const tvOnly = createTvOnlyPlaceholderChannel();
+    channels.push(tvOnly);
+    await tvOnly.connect();
   }
 
   // Start subsystems (independently of connection handler)

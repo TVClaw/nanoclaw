@@ -14,6 +14,7 @@ import { CronExpressionParser } from 'cron-parser';
 const IPC_DIR = '/workspace/ipc';
 const MESSAGES_DIR = path.join(IPC_DIR, 'messages');
 const TASKS_DIR = path.join(IPC_DIR, 'tasks');
+const TV_DIR = path.join(IPC_DIR, 'tv');
 
 // Context from environment variables (set by the agent runner)
 const chatJid = process.env.NANOCLAW_CHAT_JID!;
@@ -59,6 +60,56 @@ server.tool(
     writeIpcFile(MESSAGES_DIR, data);
 
     return { content: [{ type: 'text' as const, text: 'Message sent.' }] };
+  },
+);
+
+server.tool(
+  'send_tv_command',
+  'Send a command to connected TVClaw Android TV clients (WebSocket). Main group only. Use for actions like SHOW_TOAST (params.message), MEDIA_CONTROL, LAUNCH_APP, etc.',
+  {
+    action: z
+      .string()
+      .describe(
+        'Protocol action e.g. SHOW_TOAST, MEDIA_CONTROL, LAUNCH_APP, SEARCH, VISION_SYNC',
+      ),
+    params: z
+      .record(z.string(), z.unknown())
+      .optional()
+      .describe('Optional params object (e.g. { "message": "Hello" } for SHOW_TOAST)'),
+  },
+  async (args) => {
+    if (!isMain) {
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: 'Only the main group can send TV commands.',
+          },
+        ],
+        isError: true,
+      };
+    }
+
+    const data = {
+      type: 'tv_command',
+      payload: {
+        action: args.action,
+        params: args.params ?? {},
+      },
+      groupFolder,
+      timestamp: new Date().toISOString(),
+    };
+
+    writeIpcFile(TV_DIR, data);
+
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: 'TV command queued for connected TVs.',
+        },
+      ],
+    };
   },
 );
 

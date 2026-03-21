@@ -168,6 +168,7 @@ function buildVolumeMounts(
   const groupIpcDir = resolveGroupIpcPath(group.folder);
   fs.mkdirSync(path.join(groupIpcDir, 'messages'), { recursive: true });
   fs.mkdirSync(path.join(groupIpcDir, 'tasks'), { recursive: true });
+  fs.mkdirSync(path.join(groupIpcDir, 'tv'), { recursive: true });
   fs.mkdirSync(path.join(groupIpcDir, 'input'), { recursive: true });
   mounts.push({
     hostPath: groupIpcDir,
@@ -672,6 +673,7 @@ export function writeTasksSnapshot(
   // Write filtered tasks to the group's IPC directory
   const groupIpcDir = resolveGroupIpcPath(groupFolder);
   fs.mkdirSync(groupIpcDir, { recursive: true });
+  fs.mkdirSync(path.join(groupIpcDir, 'tv'), { recursive: true });
 
   // Main sees all tasks, others only see their own
   const filteredTasks = isMain
@@ -702,6 +704,7 @@ export function writeGroupsSnapshot(
 ): void {
   const groupIpcDir = resolveGroupIpcPath(groupFolder);
   fs.mkdirSync(groupIpcDir, { recursive: true });
+  fs.mkdirSync(path.join(groupIpcDir, 'tv'), { recursive: true });
 
   // Main sees all groups; others see nothing (they can't activate groups)
   const visibleGroups = isMain ? groups : [];

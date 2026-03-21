@@ -8,6 +8,7 @@ import { AvailableGroup } from './container-runner.js';
 import { createTask, deleteTask, getTaskById, updateTask } from './db.js';
 import { isValidGroupFolder } from './group-folder.js';
 import { logger } from './logger.js';
+import { getTvManager, parseTvHttpPayload } from './services/tv-manager.js';
 import { RegisteredGroup } from './types.js';
 
 export interface IpcDeps {
@@ -63,6 +64,7 @@ export function startIpcWatcher(deps: IpcDeps): void {
       const isMain = folderIsMain.get(sourceGroup) === true;
       const messagesDir = path.join(ipcBaseDir, sourceGroup, 'messages');
       const tasksDir = path.join(ipcBaseDir, sourceGroup, 'tasks');
+      const tvDir = path.join(ipcBaseDir, sourceGroup, 'tv');
 
       // Process messages from this group's IPC directory
       try {
@@ -113,6 +115,51 @@ export function startIpcWatcher(deps: IpcDeps): void {
           { err, sourceGroup },
           'Error reading IPC messages directory',
         );
+      }
+
+      try {
+        if (fs.existsSync(tvDir)) {
+          const tvFiles = fs
+            .readdirSync(tvDir)
+            .filter((f) => f.endsWith('.json'));
+          for (const file of tvFiles) {
+            const filePath = path.join(tvDir, file);
+            try {
+              const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+              if (data.type === 'tv_command' && data.payload != null) {
+                if (!isMain) {
+                  logger.warn(
+                    { sourceGroup },
+                    'Unauthorized tv_command IPC blocked (not main group)',
+                  );
+                } else {
+                  const protocolPayload = parseTvHttpPayload({
+                    payload: data.payload,
+                  });
+                  getTvManager().sendToAll(protocolPayload);
+                  logger.info(
+                    { sourceGroup, action: protocolPayload.action },
+                    'IPC tv_command sent to TVs',
+                  );
+                }
+              }
+              fs.unlinkSync(filePath);
+            } catch (err) {
+              logger.error(
+                { file, sourceGroup, err },
+                'Error processing IPC tv command',
+              );
+              const errorDir = path.join(ipcBaseDir, 'errors');
+              fs.mkdirSync(errorDir, { recursive: true });
+              fs.renameSync(
+                filePath,
+                path.join(errorDir, `${sourceGroup}-tv-${file}`),
+              );
+            }
+          }
+        }
+      } catch (err) {
+        logger.error({ err, sourceGroup }, 'Error reading IPC tv directory');
       }
 
       // Process tasks from this group's IPC directory

@@ -43,6 +43,10 @@ NanoClaw provides that same core functionality, but in a codebase small enough t
 
 ## Quick Start
 
+**TVClaw fork (fastest, no Claude CLI):** from this directory run `npm run onboard`, add an API key to `.env`, then `npm start`. See [TVCLAW-ONBOARD.md](TVCLAW-ONBOARD.md).
+
+**Default NanoClaw (Claude Code + skills):**
+
 ```bash
 gh repo fork qwibitai/nanoclaw --clone
 cd nanoclaw
