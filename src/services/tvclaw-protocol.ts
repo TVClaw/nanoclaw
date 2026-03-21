@@ -5,11 +5,7 @@ export type ProtocolAction =
   | 'VISION_SYNC'
   | 'SHOW_TOAST';
 
-export type MediaControl =
-  | 'PLAY'
-  | 'PAUSE'
-  | 'REWIND_30'
-  | 'MUTE';
+export type MediaControl = 'PLAY' | 'PAUSE' | 'REWIND_30' | 'MUTE';
 
 export interface ProtocolParams {
   app_id?: string;

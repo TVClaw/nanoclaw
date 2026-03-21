@@ -166,7 +166,10 @@ export class TvManager {
   private onServiceUp(s: Service): void {
     const host = pickServiceHost(s);
     if (host == null || !s.port) {
-      logger.warn({ name: s.name }, 'tvclaw browse: service missing address or port');
+      logger.warn(
+        { name: s.name },
+        'tvclaw browse: service missing address or port',
+      );
       return;
     }
     const key = this.serviceKey(s);
