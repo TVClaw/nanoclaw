@@ -148,7 +148,10 @@ export function startIpcWatcher(deps: IpcDeps): void {
                       'responses',
                       `${data.requestId}.json`,
                     );
-                    getTvManager().registerVisionSync(data.requestId, responsePath);
+                    getTvManager().registerVisionSync(
+                      data.requestId,
+                      responsePath,
+                    );
                   }
                   const delivered = getTvManager().sendToAll(protocolPayload);
                   if (delivered === 0) {

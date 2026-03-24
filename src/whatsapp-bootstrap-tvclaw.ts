@@ -38,7 +38,9 @@ function findGroupBySubject(
   return undefined;
 }
 
-async function ensureTvclawGroup(sock: ReturnType<typeof makeWASocket>): Promise<string> {
+async function ensureTvclawGroup(
+  sock: ReturnType<typeof makeWASocket>,
+): Promise<string> {
   const participating = await sock.groupFetchAllParticipating();
   const existing = findGroupBySubject(participating, groupName);
   if (existing) {
@@ -75,7 +77,9 @@ async function main(): Promise<void> {
 
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
   if (!state.creds.me?.id) {
-    console.error('No WhatsApp session in store/auth. Scan the QR / pairing step first.');
+    console.error(
+      'No WhatsApp session in store/auth. Scan the QR / pairing step first.',
+    );
     process.exit(1);
   }
 
@@ -97,11 +101,15 @@ async function main(): Promise<void> {
   sock.ev.on('creds.update', saveCreds);
 
   await new Promise<void>((resolve, reject) => {
-    const t = setTimeout(() => reject(new Error('WhatsApp connection timeout')), 120_000);
+    const t = setTimeout(
+      () => reject(new Error('WhatsApp connection timeout')),
+      120_000,
+    );
     sock.ev.on('connection.update', ({ connection, lastDisconnect }) => {
       if (connection === 'close') {
-        const reason = (lastDisconnect?.error as { output?: { statusCode?: number } })
-          ?.output?.statusCode;
+        const reason = (
+          lastDisconnect?.error as { output?: { statusCode?: number } }
+        )?.output?.statusCode;
         if (reason === DisconnectReason.loggedOut) {
           clearTimeout(t);
           reject(new Error('Logged out — delete store/auth and link again.'));

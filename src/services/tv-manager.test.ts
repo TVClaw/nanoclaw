@@ -1,8 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  normalizeTvHttpPath,
-  parseTvHttpPayload,
-} from './tv-manager.js';
+import { normalizeTvHttpPath, parseTvHttpPayload } from './tv-manager.js';
 
 describe('normalizeTvHttpPath', () => {
   it('maps empty and repeated slashes to root', () => {

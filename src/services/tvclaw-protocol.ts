@@ -92,7 +92,8 @@ function normalizeControlString(c: string): MediaControl | undefined {
  *   http://www.netflix.com/watch/12345  → unchanged
  */
 function normalizeNetflixUrl(url: string): string {
-  const netflixPattern = /^(?:nflx:|https?:)\/\/(?:www\.)?netflix\.com\/(?:title|watch)\/(\d+)/i;
+  const netflixPattern =
+    /^(?:nflx:|https?:)\/\/(?:www\.)?netflix\.com\/(?:title|watch)\/(\d+)/i;
   const match = url.match(netflixPattern);
   if (match) {
     return `http://www.netflix.com/watch/${match[1]}`;
@@ -108,15 +109,18 @@ function canonicalParamsForAction(
     case 'LAUNCH_APP':
       return p.app_id ? { app_id: p.app_id } : {};
     case 'OPEN_URL':
-      return p.url ? { url: normalizeNetflixUrl(p.url), ...(p.app_id ? { app_id: p.app_id } : {}) } : {};
+      return p.url
+        ? {
+            url: normalizeNetflixUrl(p.url),
+            ...(p.app_id ? { app_id: p.app_id } : {}),
+          }
+        : {};
     case 'MEDIA_CONTROL':
       return p.control ? { control: p.control } : {};
     case 'SHOW_TOAST':
       return p.message ? { message: p.message } : {};
     case 'SEARCH':
-      return p.app_id && p.query
-        ? { app_id: p.app_id, query: p.query }
-        : {};
+      return p.app_id && p.query ? { app_id: p.app_id, query: p.query } : {};
     case 'UNIVERSAL_SEARCH':
       return p.query ? { query: p.query } : {};
     case 'KEY_EVENT':
@@ -146,7 +150,13 @@ export function normalizeTvPayload(payload: ProtocolPayload): ProtocolPayload {
     return undefined;
   };
   if (!params.app_id) {
-    const a = pickStr('app_id', 'appId', 'package', 'package_name', 'packageName');
+    const a = pickStr(
+      'app_id',
+      'appId',
+      'package',
+      'package_name',
+      'packageName',
+    );
     if (a) params.app_id = a;
   }
   if (!params.query) {

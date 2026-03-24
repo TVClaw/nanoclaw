@@ -1,4 +1,11 @@
-import { createReadStream, existsSync, mkdirSync, renameSync, statSync, writeFileSync } from 'node:fs';
+import {
+  createReadStream,
+  existsSync,
+  mkdirSync,
+  renameSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { createServer, type Server } from 'node:http';
 import { networkInterfaces } from 'node:os';
 import path from 'node:path';
@@ -104,7 +111,9 @@ function preferredLanIPv4(): string | null {
 function printTvclawLanBanner(httpPort: number, hasApk: boolean): void {
   const ip = preferredLanIPv4();
   if (!ip) {
-    logger.warn('Could not detect a LAN IPv4; use this machine’s IP manually for TV download URL');
+    logger.warn(
+      'Could not detect a LAN IPv4; use this machine’s IP manually for TV download URL',
+    );
     return;
   }
   const base = `http://${ip}:${httpPort}`;
@@ -135,7 +144,6 @@ type TvTarget = {
 type PendingVisionSync = {
   responseFilePath: string;
 };
-
 
 export class TvManager {
   private readonly clients = new Set<WebSocket>();
@@ -169,7 +177,10 @@ export class TvManager {
 
       const pending = this.pendingVisionSyncs.get(requestId);
       if (!pending) {
-        logger.warn({ requestId }, 'tvclaw: vision_sync_response for unknown requestId');
+        logger.warn(
+          { requestId },
+          'tvclaw: vision_sync_response for unknown requestId',
+        );
         return;
       }
       this.pendingVisionSyncs.delete(requestId);
@@ -181,11 +192,13 @@ export class TvManager {
         renameSync(tmp, pending.responseFilePath);
         logger.info({ requestId }, 'tvclaw: vision_sync_response written');
       } catch (err) {
-        logger.error({ err, requestId }, 'tvclaw: failed to write vision response');
+        logger.error(
+          { err, requestId },
+          'tvclaw: failed to write vision response',
+        );
       }
     }
   }
-
 
   sendToAll(payload: ProtocolPayload): number {
     const normalized = normalizeTvPayload(payload);

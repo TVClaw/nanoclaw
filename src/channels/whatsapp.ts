@@ -220,20 +220,13 @@ export class WhatsAppChannel implements Channel {
 
             const ext = normalized.extendedTextMessage;
             const mentioned = ext?.contextInfo?.mentionedJid;
-            if (
-              mentioned &&
-              mentioned.length > 0 &&
-              this.sock.user?.id
-            ) {
+            if (mentioned && mentioned.length > 0 && this.sock.user?.id) {
               const myPhone = this.sock.user.id.split('@')[0].split(':')[0];
               const mentionsAssistant = mentioned.some((jid: string) => {
                 const p = jid.split('@')[0].split(':')[0];
                 return p === myPhone;
               });
-              if (
-                mentionsAssistant &&
-                !TRIGGER_PATTERN.test(content.trim())
-              ) {
+              if (mentionsAssistant && !TRIGGER_PATTERN.test(content.trim())) {
                 content = `@${ASSISTANT_NAME} ${content}`;
               }
             }
