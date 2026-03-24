@@ -7,8 +7,8 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import fs from 'fs';
-import path from 'path';
+import fs from 'node:fs';
+import path from 'node:path';
 import { CronExpressionParser } from 'cron-parser';
 
 const IPC_DIR = '/workspace/ipc';
@@ -63,19 +63,108 @@ server.tool(
   },
 );
 
-server.tool(
-  'send_tv_command',
-  'Send a command to connected TVClaw Android TV clients (WebSocket). Main group only. Use for actions like SHOW_TOAST (params.message), MEDIA_CONTROL, LAUNCH_APP, etc.',
-  {
-    action: z
+const tvMediaControl = z.enum([
+  'PLAY',
+  'PAUSE',
+  'REWIND_30',
+  'FAST_FORWARD_30',
+  'MUTE',
+  'HOME',
+  'BACK',
+]);
+
+const tvKeyCode = z.enum([
+  'DPAD_UP', 'DPAD_DOWN', 'DPAD_LEFT', 'DPAD_RIGHT',
+  'DPAD_CENTER', 'ENTER', 'BACK', 'HOME', 'MENU',
+  'CHANNEL_UP', 'CHANNEL_DOWN', 'VOLUME_UP', 'VOLUME_DOWN',
+]);
+
+const sendTvCommandSchema = z.discriminatedUnion('action', [
+  z.object({
+    action: z.literal('LAUNCH_APP'),
+    app_id: z
       .string()
-      .describe(
-        'Protocol action e.g. SHOW_TOAST, MEDIA_CONTROL, LAUNCH_APP, SEARCH, VISION_SYNC',
-      ),
-    params: z
-      .record(z.string(), z.unknown())
-      .optional()
-      .describe('Optional params object (e.g. { "message": "Hello" } for SHOW_TOAST)'),
+      .min(1)
+      .describe('App identifier: package name or short app name alias'),
+  }),
+  z.object({
+    action: z.literal('OPEN_URL'),
+    url: z.string().min(1),
+    app_id: z.string().min(1).optional(),
+  }),
+  z.object({
+    action: z.literal('MEDIA_CONTROL'),
+    control: tvMediaControl,
+  }),
+  z.object({
+    action: z.literal('KEY_EVENT'),
+    keycode: tvKeyCode.describe('D-pad or key to press: DPAD_UP/DOWN/LEFT/RIGHT/CENTER, ENTER, BACK, HOME, MENU, CHANNEL_UP/DOWN, VOLUME_UP/DOWN'),
+  }),
+  z.object({
+    action: z.literal('SHOW_TOAST'),
+    message: z.string().min(1),
+  }),
+  z.object({
+    action: z.literal('SEARCH'),
+    app_id: z.string().min(1),
+    query: z.string().min(1),
+  }),
+  z.object({
+    action: z.literal('UNIVERSAL_SEARCH'),
+    query: z.string().min(1),
+  }),
+  z.object({
+    action: z.literal('SLEEP_TIMER'),
+    minutes: z.number().int().positive(),
+  }),
+  z.object({
+    action: z.literal('VISION_SYNC'),
+  }).describe('Capture a screenshot of the TV screen. Returns a JPEG image. Use this to see what is on screen before navigating.'),
+]);
+
+type SendTvCommandArgs = z.infer<typeof sendTvCommandSchema>;
+
+function tvCommandToPayload(args: SendTvCommandArgs): {
+  action: string;
+  params: Record<string, unknown>;
+} {
+  switch (args.action) {
+    case 'LAUNCH_APP':
+      return { action: 'LAUNCH_APP', params: { app_id: args.app_id } };
+    case 'MEDIA_CONTROL':
+      return { action: 'MEDIA_CONTROL', params: { control: args.control } };
+    case 'KEY_EVENT':
+      return { action: 'KEY_EVENT', params: { keycode: args.keycode } };
+    case 'OPEN_URL':
+      return {
+        action: 'OPEN_URL',
+        params: { url: args.url, ...(args.app_id ? { app_id: args.app_id } : {}) },
+      };
+    case 'SHOW_TOAST':
+      return { action: 'SHOW_TOAST', params: { message: args.message } };
+    case 'SEARCH':
+      return {
+        action: 'SEARCH',
+        params: { app_id: args.app_id, query: args.query },
+      };
+    case 'UNIVERSAL_SEARCH':
+      return { action: 'UNIVERSAL_SEARCH', params: { query: args.query } };
+    case 'SLEEP_TIMER':
+      return { action: 'SLEEP_TIMER', params: { value: args.minutes } };
+    case 'VISION_SYNC':
+      return { action: 'VISION_SYNC', params: {} };
+  }
+}
+
+const VISION_SYNC_TIMEOUT_MS = 30_000;
+const VISION_SYNC_POLL_MS = 500;
+
+server.registerTool(
+  'send_tv_command',
+  {
+    description:
+      'Control TVClaw Android TVs (WebSocket). Main group only. The Mac must have an active WebSocket to the TV (user taps Connect bridge on the TV app, same LAN). If no TV is connected, the command is dropped and nothing happens on screen — tell the user to open the bridge, do not claim success.\n\nVISION_SYNC: captures a screenshot of the TV screen and returns it as an image. Use this to see what is currently on screen, then navigate with KEY_EVENT (DPAD_UP/DOWN/LEFT/RIGHT/CENTER, ENTER, BACK) or other actions.',
+    inputSchema: sendTvCommandSchema,
   },
   async (args) => {
     if (!isMain) {
@@ -90,23 +179,76 @@ server.tool(
       };
     }
 
+    // VISION_SYNC: async round-trip — write IPC with requestId, poll for response file
+    if (args.action === 'VISION_SYNC') {
+      const requestId = `vsync-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const responsePath = path.join(TV_DIR, 'responses', `${requestId}.json`);
+      const data = {
+        type: 'tv_command',
+        payload: { action: 'VISION_SYNC', params: { request_id: requestId } },
+        requestId,
+        groupFolder,
+        timestamp: new Date().toISOString(),
+      };
+      writeIpcFile(TV_DIR, data);
+
+      const deadline = Date.now() + VISION_SYNC_TIMEOUT_MS;
+      while (Date.now() < deadline) {
+        await new Promise<void>((r) => setTimeout(r, VISION_SYNC_POLL_MS));
+        if (fs.existsSync(responsePath)) {
+          try {
+            const raw = JSON.parse(fs.readFileSync(responsePath, 'utf-8'));
+            fs.unlinkSync(responsePath);
+            if (raw.jpeg_base64) {
+              return {
+                content: [
+                  {
+                    type: 'image' as const,
+                    data: raw.jpeg_base64 as string,
+                    mimeType: 'image/jpeg',
+                  },
+                ],
+              };
+            }
+            if (raw.error) {
+              return {
+                content: [{ type: 'text' as const, text: `VISION_SYNC failed: ${raw.error}` }],
+                isError: true,
+              };
+            }
+          } catch (err) {
+            return {
+              content: [{ type: 'text' as const, text: `VISION_SYNC response parse error: ${err}` }],
+              isError: true,
+            };
+          }
+        }
+      }
+      return {
+        content: [{ type: 'text' as const, text: 'VISION_SYNC timeout: TV did not respond within 30 seconds. Is the bridge connected and does the TV run Android 12+?' }],
+        isError: true,
+      };
+    }
+
+    const payload = tvCommandToPayload(args);
     const data = {
       type: 'tv_command',
-      payload: {
-        action: args.action,
-        params: args.params ?? {},
-      },
+      payload,
       groupFolder,
       timestamp: new Date().toISOString(),
     };
 
     writeIpcFile(TV_DIR, data);
 
+    const body = JSON.stringify({
+      action: payload.action,
+      params: payload.params,
+    });
     return {
       content: [
         {
           type: 'text' as const,
-          text: 'TV command queued for connected TVs.',
+          text: `TV command queued on the Mac (delivered only if a TV WebSocket is connected — otherwise user must open TVClaw bridge on the TV). Body: ${body}`,
         },
       ],
     };
@@ -345,42 +487,6 @@ server.tool(
     writeIpcFile(TASKS_DIR, data);
 
     return { content: [{ type: 'text' as const, text: `Task ${args.task_id} update requested.` }] };
-  },
-);
-
-server.tool(
-  'register_group',
-  `Register a new chat/group so the agent can respond to messages there. Main group only.
-
-Use available_groups.json to find the JID for a group. The folder name must be channel-prefixed: "{channel}_{group-name}" (e.g., "whatsapp_family-chat", "telegram_dev-team", "discord_general"). Use lowercase with hyphens for the group name part.`,
-  {
-    jid: z.string().describe('The chat JID (e.g., "120363336345536173@g.us", "tg:-1001234567890", "dc:1234567890123456")'),
-    name: z.string().describe('Display name for the group'),
-    folder: z.string().describe('Channel-prefixed folder name (e.g., "whatsapp_family-chat", "telegram_dev-team")'),
-    trigger: z.string().describe('Trigger word (e.g., "@Andy")'),
-  },
-  async (args) => {
-    if (!isMain) {
-      return {
-        content: [{ type: 'text' as const, text: 'Only the main group can register new groups.' }],
-        isError: true,
-      };
-    }
-
-    const data = {
-      type: 'register_group',
-      jid: args.jid,
-      name: args.name,
-      folder: args.folder,
-      trigger: args.trigger,
-      timestamp: new Date().toISOString(),
-    };
-
-    writeIpcFile(TASKS_DIR, data);
-
-    return {
-      content: [{ type: 'text' as const, text: `Group "${args.name}" registered. It will start receiving messages immediately.` }],
-    };
   },
 );
 

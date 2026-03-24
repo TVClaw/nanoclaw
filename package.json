@@ -6,6 +6,8 @@
   "main": "dist/index.js",
   "scripts": {
     "onboard": "bash scripts/tvclaw-onboard.sh",
+    "link:whatsapp": "bash scripts/whatsapp-link.sh",
+    "auth:key": "bash scripts/ensure-anthropic-key.sh",
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts",
@@ -15,7 +17,6 @@
     "format:check": "prettier --check \"src/**/*.ts\"",
     "prepare": "husky",
     "setup": "tsx setup/index.ts",
-    "auth": "tsx src/whatsapp-auth.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },

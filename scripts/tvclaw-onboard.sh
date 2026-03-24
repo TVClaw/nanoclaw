@@ -28,9 +28,12 @@ npm run build
 
 if [[ ! -f .env ]] || [[ ! -s .env ]]; then
   cp .env.example .env
-  echo "Created .env — add ANTHROPIC_API_KEY (or CLAUDE_CODE_OAUTH_TOKEN), then save."
+  echo "Created .env from .env.example."
   echo ""
 fi
+
+bash scripts/ensure-anthropic-key.sh
+echo ""
 
 if command -v docker >/dev/null 2>&1 && [[ -f container/build.sh ]]; then
   echo "Building nanoclaw-agent Docker image (first time can take several minutes)..."
@@ -40,7 +43,7 @@ fi
 
 echo "Next:"
 echo "  1. Edit .env in this folder (API key or OAuth token)."
-echo "  2. WhatsApp: run Claude Code here and use skill /add-whatsapp, or: npm run setup"
+echo "  2. WhatsApp: merge nanoclaw-whatsapp, then: npm run link:whatsapp"
 echo "  3. Start:    npm start"
 echo "  4. TV:       install TVClaw APK, enable Accessibility, tap Start TV bridge (mDNS)."
 echo ""

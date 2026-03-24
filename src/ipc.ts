@@ -136,11 +136,39 @@ export function startIpcWatcher(deps: IpcDeps): void {
                   const protocolPayload = parseTvHttpPayload({
                     payload: data.payload,
                   });
-                  getTvManager().sendToAll(protocolPayload);
-                  logger.info(
-                    { sourceGroup, action: protocolPayload.action },
-                    'IPC tv_command sent to TVs',
-                  );
+                  // Register vision sync response path before sending so the
+                  // TvManager can write the response when the TV replies.
+                  if (
+                    protocolPayload.action === 'VISION_SYNC' &&
+                    typeof data.requestId === 'string' &&
+                    data.requestId
+                  ) {
+                    const responsePath = path.join(
+                      tvDir,
+                      'responses',
+                      `${data.requestId}.json`,
+                    );
+                    getTvManager().registerVisionSync(data.requestId, responsePath);
+                  }
+                  const delivered = getTvManager().sendToAll(protocolPayload);
+                  if (delivered === 0) {
+                    logger.warn(
+                      {
+                        sourceGroup,
+                        action: protocolPayload.action,
+                      },
+                      'IPC tv_command: no connected TVs (open TVClaw bridge on TV, same LAN / mDNS)',
+                    );
+                  } else {
+                    logger.info(
+                      {
+                        sourceGroup,
+                        action: protocolPayload.action,
+                        tvs: delivered,
+                      },
+                      'IPC tv_command sent to TVs',
+                    );
+                  }
                 }
               }
               fs.unlinkSync(filePath);

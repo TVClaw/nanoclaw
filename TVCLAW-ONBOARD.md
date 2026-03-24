@@ -7,7 +7,7 @@ cd nanoclaw
 npm run onboard
 ```
 
-Then edit `.env` (at least `ANTHROPIC_API_KEY=` or `CLAUDE_CODE_OAUTH_TOKEN=`), then:
+Then either run **`npm run auth:key`** (prompt + opens [API keys](https://console.anthropic.com/settings/keys)) or edit `.env` yourself (`ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN`), then:
 
 ```bash
 npm start
@@ -26,12 +26,17 @@ If you have **not** added WhatsApp (or any channel) yet, `npm start` still runs 
 
 ## WhatsApp
 
-NanoClaw does not bundle WhatsApp in core. After onboard, either:
+NanoClaw does not bundle WhatsApp in core. After you merge [nanoclaw-whatsapp](https://github.com/qwibitai/nanoclaw-whatsapp) and `import './whatsapp.js'` in `src/channels/index.ts`, link the device:
 
-- Open this repo in **Claude Code** and run skill **`/add-whatsapp`**, or  
-- Run **`npm run setup`** and follow the prompts.
+```bash
+npm run link:whatsapp
+```
 
-Use your **main** chat (registered with `isMain`) for TV tools — `send_tv_command` is main-only.
+Pairing (no QR): `WHATSAPP_PHONE=9725XXXXXXXX npm run link:whatsapp` (digits only, country code, no `+`). Default: QR printed in this terminal. Or Claude Code **`/add-whatsapp`**.
+
+After auth, **`npm run link:whatsapp`** (by default) creates a WhatsApp group named **TVClaw** (if needed), registers **only** that `…@g.us` chat as main, and leaves message-yourself **unregistered**. Override the name with `WHATSAPP_AGENT_GROUP_NAME`. Skip auto setup with `WHATSAPP_SKIP_BOOTSTRAP=1` (then you get an optional JID prompt). Register a specific JID instead with `WHATSAPP_REGISTER_JID='…@g.us'`. Skip any post-auth step with `WHATSAPP_SKIP_REGISTER=1`. Optional: `WHATSAPP_REGISTER_FOLDER` (default `tvclaw`), `WHATSAPP_REGISTER_NAME`.
+
+Use your **main** chat (registered with `isMain`) for TV tools — `send_tv_command` is main-only. By default every registered chat (including main self-chat) only runs the agent when you send **`@<ASSISTANT_NAME>`** (or a WhatsApp @-mention of your number). Pass **`--no-trigger-required`** to `register` only if you want every message in that chat to wake the agent.
 
 ## TV (no brain IP in `.env`)
 

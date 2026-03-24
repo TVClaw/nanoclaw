@@ -9,6 +9,7 @@ import path from 'path';
 import {
   CONTAINER_IMAGE,
   CONTAINER_MAX_OUTPUT_SIZE,
+  NANOCLAW_MODEL,
   CONTAINER_TIMEOUT,
   CREDENTIAL_PROXY_PORT,
   DATA_DIR,
@@ -237,6 +238,9 @@ function buildContainerArgs(
     args.push('-e', 'ANTHROPIC_API_KEY=placeholder');
   } else {
     args.push('-e', 'CLAUDE_CODE_OAUTH_TOKEN=placeholder');
+  }
+  if (NANOCLAW_MODEL) {
+    args.push('-e', `NANOCLAW_MODEL=${NANOCLAW_MODEL}`);
   }
 
   // Runtime-specific args for host gateway resolution

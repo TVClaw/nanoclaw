@@ -16,6 +16,7 @@ import {
   ASSISTANT_HAS_OWN_NUMBER,
   ASSISTANT_NAME,
   STORE_DIR,
+  TRIGGER_PATTERN,
 } from '../config.js';
 import { getLastGroupSync, setLastGroupSync, updateChatName } from '../db.js';
 import { logger } from '../logger.js';
@@ -203,7 +204,7 @@ export class WhatsAppChannel implements Channel {
           // Only deliver full message for registered groups
           const groups = this.opts.registeredGroups();
           if (groups[chatJid]) {
-            const content =
+            let content =
               normalized.conversation ||
               normalized.extendedTextMessage?.text ||
               normalized.imageMessage?.caption ||
@@ -212,6 +213,30 @@ export class WhatsAppChannel implements Channel {
 
             // Skip protocol messages with no text content (encryption keys, read receipts, etc.)
             if (!content) continue;
+
+            content = content
+              .replace(/^[\u200e\u200f\u202a-\u202e\ufeff]+/g, '')
+              .trimStart();
+
+            const ext = normalized.extendedTextMessage;
+            const mentioned = ext?.contextInfo?.mentionedJid;
+            if (
+              mentioned &&
+              mentioned.length > 0 &&
+              this.sock.user?.id
+            ) {
+              const myPhone = this.sock.user.id.split('@')[0].split(':')[0];
+              const mentionsAssistant = mentioned.some((jid: string) => {
+                const p = jid.split('@')[0].split(':')[0];
+                return p === myPhone;
+              });
+              if (
+                mentionsAssistant &&
+                !TRIGGER_PATTERN.test(content.trim())
+              ) {
+                content = `@${ASSISTANT_NAME} ${content}`;
+              }
+            }
 
             const sender = msg.key.participant || msg.key.remoteJid || '';
             const senderName = msg.pushName || sender.split('@')[0];

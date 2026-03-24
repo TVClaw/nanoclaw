@@ -365,6 +365,7 @@ async function runQuery(
   let lastAssistantUuid: string | undefined;
   let messageCount = 0;
   let resultCount = 0;
+  const selectedModel = process.env.NANOCLAW_MODEL?.trim() || undefined;
 
   // Load global CLAUDE.md as additional system context (shared across all groups)
   const globalClaudeMdPath = '/workspace/global/CLAUDE.md';
@@ -410,6 +411,7 @@ async function runQuery(
         'mcp__nanoclaw__*'
       ],
       env: sdkEnv,
+      model: selectedModel,
       permissionMode: 'bypassPermissions',
       allowDangerouslySkipPermissions: true,
       settingSources: ['project', 'user'],

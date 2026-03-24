@@ -1,5 +1,26 @@
 import { describe, expect, it } from 'vitest';
-import { parseTvHttpPayload } from './tv-manager.js';
+import {
+  normalizeTvHttpPath,
+  parseTvHttpPayload,
+} from './tv-manager.js';
+
+describe('normalizeTvHttpPath', () => {
+  it('maps empty and repeated slashes to root', () => {
+    expect(normalizeTvHttpPath('/')).toBe('/');
+    expect(normalizeTvHttpPath('//')).toBe('/');
+    expect(normalizeTvHttpPath('///')).toBe('/');
+    expect(normalizeTvHttpPath('')).toBe('/');
+    expect(normalizeTvHttpPath(undefined)).toBe('/');
+  });
+
+  it('strips query and trailing slash on resources', () => {
+    expect(normalizeTvHttpPath('/?x=1')).toBe('/');
+    expect(normalizeTvHttpPath('/health')).toBe('/health');
+    expect(normalizeTvHttpPath('/tvclaw-client.apk/')).toBe(
+      '/tvclaw-client.apk',
+    );
+  });
+});
 
 describe('parseTvHttpPayload', () => {
   it('accepts nested payload', () => {

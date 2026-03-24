@@ -51,7 +51,7 @@ async function connectSocket(
 ): Promise<void> {
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
 
-  if (state.creds.registered && !isReconnect) {
+  if (state.creds.me?.id && !isReconnect) {
     fs.writeFileSync(STATUS_FILE, 'already_authenticated');
     console.log('✓ Already authenticated with WhatsApp');
     console.log(

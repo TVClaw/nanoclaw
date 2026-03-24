@@ -1,14 +1,26 @@
-import { createReadStream, existsSync } from 'node:fs';
+import { createReadStream, existsSync, mkdirSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
+import { networkInterfaces } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Bonjour, type Service } from 'bonjour-service';
 import WebSocket from 'ws';
 import {
   createTVClawEnvelope,
+  normalizeTvPayload,
   type ProtocolPayload,
 } from './tvclaw-protocol.js';
 import { logger } from '../logger.js';
+
+export function normalizeTvHttpPath(reqUrl: string | undefined): string {
+  const pathOnly = (reqUrl ?? '/').split('?')[0] ?? '/';
+  let p = pathOnly.replace(/\/+/g, '/');
+  if (p === '') p = '/';
+  if (p.length > 1 && p.endsWith('/')) {
+    p = p.slice(0, -1);
+  }
+  return p;
+}
 
 function parsePocPayload(raw: unknown): ProtocolPayload {
   if (raw === null || typeof raw !== 'object') {
@@ -70,6 +82,48 @@ function wsUrl(host: string, port: number): string {
   return `ws://${host}:${port}`;
 }
 
+function preferredLanIPv4(): string | null {
+  const nets = networkInterfaces();
+  const v4: string[] = [];
+  for (const list of Object.values(nets)) {
+    if (!list) continue;
+    for (const e of list) {
+      if (e.internal) continue;
+      const fam = e.family as string | number;
+      if (fam !== 'IPv4' && fam !== 4) continue;
+      v4.push(e.address);
+    }
+  }
+  const isPrivate = (ip: string) =>
+    ip.startsWith('10.') ||
+    ip.startsWith('192.168.') ||
+    /^172\.(1[6-9]|2\d|3[0-1])\./.test(ip);
+  return v4.find(isPrivate) ?? v4[0] ?? null;
+}
+
+function printTvclawLanBanner(httpPort: number, hasApk: boolean): void {
+  const ip = preferredLanIPv4();
+  if (!ip) {
+    logger.warn('Could not detect a LAN IPv4; use this machine’s IP manually for TV download URL');
+    return;
+  }
+  const base = `http://${ip}:${httpPort}`;
+  if (process.env.NO_COLOR) {
+    console.log(`TVClaw on LAN — ${base}/  APK: ${base}/tvclaw-client.apk`);
+    return;
+  }
+  const b = '\x1b[1;33m';
+  const r = '\x1b[0m';
+  const line = `${b}══════════════════════════════════════════════════════════════${r}`;
+  console.log(`\n${line}`);
+  console.log(
+    `${b} TVClaw on this Mac — open on your TV browser:${r}\n` +
+      `   ${b}Home${r}  ${base}/\n` +
+      (hasApk ? `   ${b}APK${r}   ${base}/tvclaw-client.apk\n` : ''),
+  );
+  console.log(`${line}\n`);
+}
+
 type TvTarget = {
   key: string;
   host: string;
@@ -78,6 +132,11 @@ type TvTarget = {
   reconnectTimer: ReturnType<typeof setTimeout> | null;
 };
 
+type PendingVisionSync = {
+  responseFilePath: string;
+};
+
+
 export class TvManager {
   private readonly clients = new Set<WebSocket>();
   private httpServer: Server | null = null;
@@ -85,18 +144,72 @@ export class TvManager {
   private bonjour: Bonjour | null = null;
   private browser: ReturnType<Bonjour['find']> | null = null;
   private readonly targets = new Map<string, TvTarget>();
+  private readonly pendingVisionSyncs = new Map<string, PendingVisionSync>();
 
   clientCount(): number {
     return this.clients.size;
   }
 
-  sendToAll(payload: ProtocolPayload): void {
-    const msg = JSON.stringify(createTVClawEnvelope(payload));
+  registerVisionSync(requestId: string, responseFilePath: string): void {
+    this.pendingVisionSyncs.set(requestId, { responseFilePath });
+  }
+
+  private onTvMessage(rawData: string): void {
+    let msg: Record<string, unknown>;
+    try {
+      msg = JSON.parse(rawData);
+    } catch {
+      logger.debug({ rawData }, 'tvclaw: non-JSON message from TV, ignoring');
+      return;
+    }
+
+    if (msg.type === 'vision_sync_response') {
+      const requestId = msg.request_id as string | undefined;
+      if (!requestId) return;
+
+      const pending = this.pendingVisionSyncs.get(requestId);
+      if (!pending) {
+        logger.warn({ requestId }, 'tvclaw: vision_sync_response for unknown requestId');
+        return;
+      }
+      this.pendingVisionSyncs.delete(requestId);
+
+      try {
+        mkdirSync(path.dirname(pending.responseFilePath), { recursive: true });
+        const tmp = `${pending.responseFilePath}.tmp`;
+        writeFileSync(tmp, JSON.stringify(msg));
+        renameSync(tmp, pending.responseFilePath);
+        logger.info({ requestId }, 'tvclaw: vision_sync_response written');
+      } catch (err) {
+        logger.error({ err, requestId }, 'tvclaw: failed to write vision response');
+      }
+    }
+  }
+
+
+  sendToAll(payload: ProtocolPayload): number {
+    const normalized = normalizeTvPayload(payload);
+    const envelope = createTVClawEnvelope(normalized);
+    const msg = JSON.stringify(envelope);
+    const postBody = JSON.stringify({
+      action: normalized.action,
+      params: normalized.params,
+    });
+    logger.info(
+      {
+        tvPostBody: postBody,
+        tvWebSocketJson: msg,
+      },
+      'tvclaw TV command (tvPostBody matches curl -d; tvWebSocketJson is sent on WebSocket)',
+    );
+    let n = 0;
     for (const c of this.clients) {
       if (c.readyState === WebSocket.OPEN) {
         c.send(msg);
+        n++;
       }
     }
+    return n;
   }
 
   private serviceKey(s: Service): string {
@@ -144,6 +257,9 @@ export class TvManager {
     ws.on('open', () => {
       this.clients.add(ws);
       logger.info({ url }, 'tvclaw outbound WebSocket open');
+    });
+    ws.on('message', (data) => {
+      this.onTvMessage(data.toString());
     });
     ws.on('close', () => {
       this.clients.delete(ws);
@@ -226,38 +342,79 @@ export class TvManager {
     logger.info('tvclaw browsing _tvclaw._tcp (outbound WebSocket to TVs)');
 
     this.httpServer = createServer((req, res) => {
-      const pathname = (req.url ?? '/').split('?')[0] ?? '/';
+      const pathname = normalizeTvHttpPath(req.url);
+      const m = req.method ?? 'GET';
+      const read = m === 'GET' || m === 'HEAD';
 
-      if (req.method === 'GET' && pathname === '/health') {
-        res.writeHead(200);
-        res.end('ok');
+      if (m === 'OPTIONS') {
+        if (
+          pathname === '/health' ||
+          pathname === '/' ||
+          pathname === '/tvclaw-client.apk'
+        ) {
+          res.writeHead(204, { Allow: 'GET, HEAD, OPTIONS' });
+          res.end();
+          return;
+        }
+        if (pathname === '/tv') {
+          res.writeHead(204, { Allow: 'POST, OPTIONS' });
+          res.end();
+          return;
+        }
+        res.writeHead(404);
+        res.end();
         return;
       }
 
-      if (req.method === 'GET' && pathname === '/') {
+      if (read && pathname === '/health') {
+        res.writeHead(200);
+        if (m === 'HEAD') res.end();
+        else res.end('ok');
+        return;
+      }
+
+      if (read && pathname === '/') {
         if (!this.clientApkPath) {
           res.writeHead(503, { 'Content-Type': 'text/plain; charset=utf-8' });
-          res.end(
-            'client apk not built (assembleDebug) or TVCLAW_CLIENT_APK unset',
-          );
+          if (m === 'HEAD') res.end();
+          else {
+            res.end(
+              'client apk not built (assembleDebug) or TVCLAW_CLIENT_APK unset',
+            );
+          }
           return;
         }
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-        res.end(
-          '<!DOCTYPE html><meta charset=utf-8><title>TVClaw</title>' +
-            '<p><a href="/tvclaw-client.apk">Download TV client (APK)</a></p>',
-        );
+        if (m === 'HEAD') res.end();
+        else {
+          res.end(
+            '<!DOCTYPE html><meta charset=utf-8><title>TVClaw</title>' +
+              '<p><a href="/tvclaw-client.apk">Download TV client (APK)</a></p>',
+          );
+        }
         return;
       }
 
-      if (req.method === 'GET' && pathname === '/tvclaw-client.apk') {
+      if (read && pathname === '/tvclaw-client.apk') {
         if (!this.clientApkPath) {
           res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
-          res.end('apk not available');
+          if (m === 'HEAD') res.end();
+          else res.end('apk not available');
+          return;
+        }
+        const st = statSync(this.clientApkPath);
+        if (m === 'HEAD') {
+          res.writeHead(200, {
+            'Content-Type': 'application/vnd.android.package-archive',
+            'Content-Length': st.size,
+            'Content-Disposition': 'attachment; filename="tvclaw-client.apk"',
+          });
+          res.end();
           return;
         }
         res.writeHead(200, {
           'Content-Type': 'application/vnd.android.package-archive',
+          'Content-Length': st.size,
           'Content-Disposition': 'attachment; filename="tvclaw-client.apk"',
         });
         createReadStream(this.clientApkPath)
@@ -282,9 +439,9 @@ export class TvManager {
               Buffer.concat(chunks).toString('utf8'),
             ) as unknown;
             const payload = parsePocPayload(raw);
-            this.sendToAll(payload);
+            const delivered = this.sendToAll(payload);
             res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ ok: true, tvs: this.clients.size }));
+            res.end(JSON.stringify({ ok: true, tvs: delivered }));
           } catch {
             res.writeHead(400);
             res.end();
@@ -296,22 +453,23 @@ export class TvManager {
       res.writeHead(404);
       res.end();
     });
-    this.httpServer.listen(httpPort);
-
-    logger.info(
-      { httpPort },
-      `tvclaw brain http ${httpPort} (APK + POST /tv; TVs via mDNS _tvclaw._tcp)`,
-    );
-    if (this.clientApkPath) {
+    this.httpServer.listen(httpPort, () => {
       logger.info(
         { httpPort },
-        `tvclaw client apk http://<this-machine-lan-ip>:${httpPort}/tvclaw-client.apk`,
+        `tvclaw brain http ${httpPort} (APK + POST /tv; TVs via mDNS _tvclaw._tcp)`,
       );
-    } else {
-      logger.warn(
-        'tvclaw client apk not served (build apps/client-android or set TVCLAW_CLIENT_APK)',
-      );
-    }
+      if (this.clientApkPath) {
+        logger.info(
+          { httpPort },
+          `tvclaw client apk http://<this-machine-lan-ip>:${httpPort}/tvclaw-client.apk`,
+        );
+      } else {
+        logger.warn(
+          'tvclaw client apk not served (build apps/client-android or set TVCLAW_CLIENT_APK)',
+        );
+      }
+      printTvclawLanBanner(httpPort, !!this.clientApkPath);
+    });
   }
 
   stop(): void {
