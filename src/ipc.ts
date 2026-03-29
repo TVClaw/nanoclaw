@@ -65,6 +65,7 @@ export function startIpcWatcher(deps: IpcDeps): void {
       const messagesDir = path.join(ipcBaseDir, sourceGroup, 'messages');
       const tasksDir = path.join(ipcBaseDir, sourceGroup, 'tasks');
       const tvDir = path.join(ipcBaseDir, sourceGroup, 'tv');
+      const vibeDir = path.join(ipcBaseDir, sourceGroup, 'vibe');
 
       // Process messages from this group's IPC directory
       try {
@@ -191,6 +192,39 @@ export function startIpcWatcher(deps: IpcDeps): void {
         }
       } catch (err) {
         logger.error({ err, sourceGroup }, 'Error reading IPC tv directory');
+      }
+
+      // Process vibe page requests (main group only — opens page on TV)
+      if (isMain) {
+        try {
+          const pageFile = path.join(vibeDir, 'page.html');
+          if (fs.existsSync(pageFile)) {
+            try {
+              const html = fs.readFileSync(pageFile, 'utf8');
+              fs.unlinkSync(pageFile);
+              const url = getTvManager().addVibePage(html);
+              const delivered = getTvManager().sendToAll({
+                action: 'OPEN_URL',
+                params: { url },
+              });
+              if (delivered === 0) {
+                logger.warn(
+                  { sourceGroup, url },
+                  'Vibe page hosted but no TVs connected — open TVClaw bridge on TV',
+                );
+              } else {
+                logger.info(
+                  { sourceGroup, url, delivered },
+                  'Vibe page hosted and opened on TV',
+                );
+              }
+            } catch (err) {
+              logger.error({ err, sourceGroup }, 'Error processing vibe page');
+            }
+          }
+        } catch (err) {
+          logger.error({ err, sourceGroup }, 'Error reading IPC vibe directory');
+        }
       }
 
       // Process tasks from this group's IPC directory

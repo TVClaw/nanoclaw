@@ -1,9 +1,12 @@
+import { randomUUID } from 'node:crypto';
 import {
   createReadStream,
   existsSync,
   mkdirSync,
+  readFileSync,
   renameSync,
   statSync,
+  unlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { createServer, type Server } from 'node:http';
@@ -17,6 +20,7 @@ import {
   normalizeTvPayload,
   type ProtocolPayload,
 } from './tvclaw-protocol.js';
+import { DATA_DIR } from '../config.js';
 import { logger } from '../logger.js';
 
 export function normalizeTvHttpPath(reqUrl: string | undefined): string {
@@ -145,6 +149,8 @@ type PendingVisionSync = {
   responseFilePath: string;
 };
 
+const VIBE_PAGE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
 export class TvManager {
   private readonly clients = new Set<WebSocket>();
   private httpServer: Server | null = null;
@@ -153,6 +159,7 @@ export class TvManager {
   private browser: ReturnType<Bonjour['find']> | null = null;
   private readonly targets = new Map<string, TvTarget>();
   private readonly pendingVisionSyncs = new Map<string, PendingVisionSync>();
+  private readonly vibesDir = path.join(DATA_DIR, 'vibes');
 
   clientCount(): number {
     return this.clients.size;
@@ -160,6 +167,34 @@ export class TvManager {
 
   registerVisionSync(requestId: string, responseFilePath: string): void {
     this.pendingVisionSyncs.set(requestId, { responseFilePath });
+  }
+
+  /** Host an HTML page and return its LAN URL. Page auto-deletes after 24h. */
+  addVibePage(html: string): string {
+    mkdirSync(this.vibesDir, { recursive: true });
+    const id = randomUUID();
+    const filePath = path.join(this.vibesDir, `${id}.html`);
+    writeFileSync(filePath, html, 'utf8');
+    setTimeout(() => {
+      try {
+        unlinkSync(filePath);
+      } catch {}
+    }, VIBE_PAGE_TTL_MS);
+    const ip = preferredLanIPv4() ?? 'localhost';
+    const httpPort = Number(process.env.TVCLAW_HTTP_PORT ?? 8770);
+    return `http://${ip}:${httpPort}/vibes/${id}.html`;
+  }
+
+  private getVibePageHtml(pageId: string): string | null {
+    // Prevent path traversal: only allow UUID.html filenames
+    if (!/^[0-9a-f-]{36}\.html$/.test(pageId)) return null;
+    const filePath = path.join(this.vibesDir, pageId);
+    if (!existsSync(filePath)) return null;
+    try {
+      return readFileSync(filePath, 'utf8');
+    } catch {
+      return null;
+    }
   }
 
   private onTvMessage(rawData: string): void {
@@ -363,7 +398,8 @@ export class TvManager {
         if (
           pathname === '/health' ||
           pathname === '/' ||
-          pathname === '/tvclaw-client.apk'
+          pathname === '/tvclaw-client.apk' ||
+          pathname.startsWith('/vibes/')
         ) {
           res.writeHead(204, { Allow: 'GET, HEAD, OPTIONS' });
           res.end();
@@ -460,6 +496,21 @@ export class TvManager {
             res.end();
           }
         });
+        return;
+      }
+
+      const vibeMatch = /^\/vibes\/([^/]+)$/.exec(pathname);
+      if (read && vibeMatch) {
+        const html = this.getVibePageHtml(vibeMatch[1] ?? '');
+        if (html === null) {
+          res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+          if (m !== 'HEAD') res.end('not found');
+          else res.end();
+          return;
+        }
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+        if (m === 'HEAD') res.end();
+        else res.end(html);
         return;
       }
 

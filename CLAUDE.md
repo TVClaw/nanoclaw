@@ -59,6 +59,19 @@ systemctl --user restart nanoclaw
 
 **WhatsApp not connecting after upgrade:** WhatsApp is now a separate channel fork, not bundled in core. Run `/add-whatsapp` (or `git remote add whatsapp https://github.com/qwibitai/nanoclaw-whatsapp.git && git fetch whatsapp main && (git merge whatsapp/main || { git checkout --theirs package-lock.json && git add package-lock.json && git merge --continue; }) && npm run build`) to install it. Existing auth credentials and groups are preserved.
 
+## TV Vibe Pages
+
+To show anything on the TV (news, games, stats, weather, etc.), output the HTML in `<vibe-page>` tags — system hosts and opens it automatically. No Write tool.
+
+```
+<vibe-page><!DOCTYPE html>...</vibe-page>
+```
+
+- Search only for live data (scores, prices, breaking news). Use training data otherwise. One search max.
+- `body`: `margin:0;width:100vw;height:100vh;overflow:hidden;background:#0a0a0f;color:#fff`. Font ≥32px.
+- **Scrollable content**: wrap in `<div id="sc" style="height:100vh;overflow-y:auto;scrollbar-width:none">`, scroll it with `window.addEventListener('keydown',handler,true)` — `true` (capture phase) is mandatory on Android TV.
+- **Games**: `window.addEventListener('keydown',handler,true)` + `canvas.tabIndex=0;canvas.focus()` on load + `e.preventDefault();e.stopPropagation()` on arrow keys unconditionally. Show a `<button>` for restart, don't rely on Enter.
+
 ## Container Build Cache
 
 The container buildkit caches the build context aggressively. `--no-cache` alone does NOT invalidate COPY steps — the builder's volume retains stale files. To force a truly clean rebuild, prune the builder then re-run `./container/build.sh`.

@@ -6,6 +6,7 @@ import {
   CREDENTIAL_PROXY_PORT,
   IDLE_TIMEOUT,
   POLL_INTERVAL,
+  SESSION_IDLE_RESET_MINUTES,
   TIMEZONE,
   TRIGGER_PATTERN,
 } from './config.js';
@@ -60,6 +61,7 @@ import {
 import { startSchedulerLoop } from './task-scheduler.js';
 import { createTvOnlyPlaceholderChannel } from './channels/tvclaw-tv-only.js';
 import { getTvManager } from './services/tv-manager.js';
+import { generateVibePageDirect, isVibePageRequest } from './services/vibe-generator.js';
 import { Channel, NewMessage, RegisteredGroup } from './types.js';
 import { logger } from './logger.js';
 
@@ -188,6 +190,22 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
     missedMessages[missedMessages.length - 1].timestamp;
   saveState();
 
+  // Auto-reset session after prolonged idle to prevent context bloat
+  if (SESSION_IDLE_RESET_MINUTES > 0) {
+    const lastTs = lastAgentTimestamp[chatJid];
+    if (lastTs) {
+      const idleMs = Date.now() - new Date(lastTs).getTime();
+      if (idleMs > SESSION_IDLE_RESET_MINUTES * 60 * 1000) {
+        sessions[group.folder] = '';
+        setSession(group.folder, '');
+        logger.info(
+          { group: group.name, idleMinutes: (idleMs / 60000).toFixed(1) },
+          'Session auto-reset after idle',
+        );
+      }
+    }
+  }
+
   logger.info(
     { group: group.name, messageCount: missedMessages.length },
     'Processing messages',
@@ -218,8 +236,25 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
         typeof result.result === 'string'
           ? result.result
           : JSON.stringify(result.result);
-      // Strip <internal>...</internal> blocks — agent uses these for internal reasoning
-      const text = raw.replace(/<internal>[\s\S]*?<\/internal>/g, '').trim();
+      // Extract and host inline vibe page if present
+      const vibePageMatch = raw.match(/<vibe-page>([\s\S]*?)<\/vibe-page>/);
+      if (vibePageMatch) {
+        const html = (vibePageMatch[1] ?? '').trim();
+        if (html) {
+          try {
+            const url = getTvManager().addVibePage(html);
+            getTvManager().sendToAll({ action: 'OPEN_URL', params: { url } });
+            logger.info({ group: group.name }, 'Inline vibe page sent to TV');
+          } catch (err) {
+            logger.error({ err, group: group.name }, 'Failed to host inline vibe page');
+          }
+        }
+      }
+      // Strip <vibe-page> and <internal> blocks before sending to user
+      const text = raw
+        .replace(/<vibe-page>[\s\S]*?<\/vibe-page>/g, '')
+        .replace(/<internal>[\s\S]*?<\/internal>/g, '')
+        .trim();
       logger.info({ group: group.name }, `Agent output: ${raw.length} chars`);
       if (text) {
         await channel.sendMessage(chatJid, text);
@@ -416,6 +451,48 @@ async function startMessageLoop(): Promise<void> {
             allPending.length > 0 ? allPending : groupMessages;
           const formatted = formatMessages(messagesToSend, TIMEZONE);
 
+          // Fast path: direct API call for vibe-page requests (~5-20s vs ~60-120s through container)
+          if (group.isMain === true) {
+            const lastUserMsg = messagesToSend
+              .filter((m) => !m.is_from_me && !m.is_bot_message)
+              .pop();
+            if (lastUserMsg && isVibePageRequest(lastUserMsg.content)) {
+              lastAgentTimestamp[chatJid] =
+                messagesToSend[messagesToSend.length - 1].timestamp;
+              saveState();
+              channel
+                .sendMessage(chatJid, '⏳')
+                .catch((err) =>
+                  logger.warn({ chatJid, err }, 'Failed to send vibe acknowledgment'),
+                );
+              (async () => {
+                channel.setTyping?.(chatJid, true)?.catch(() => {});
+                try {
+                  const cleanMsg = lastUserMsg.content
+                    .replace(TRIGGER_PATTERN, '')
+                    .trim();
+                  const result = await generateVibePageDirect(cleanMsg);
+                  if (result?.html) {
+                    const url = getTvManager().addVibePage(result.html);
+                    getTvManager().sendToAll({ action: 'OPEN_URL', params: { url } });
+                  }
+                  if (result?.text) {
+                    await channel.sendMessage(chatJid, result.text);
+                  } else if (!result?.html) {
+                    // Nothing useful — fall back to container
+                    queue.enqueueMessageCheck(chatJid);
+                  }
+                } catch (err) {
+                  logger.error({ err, chatJid }, 'Fast vibe path failed, falling back to container');
+                  queue.enqueueMessageCheck(chatJid);
+                } finally {
+                  channel.setTyping?.(chatJid, false)?.catch(() => {});
+                }
+              })();
+              continue;
+            }
+          }
+
           if (queue.sendMessage(chatJid, formatted)) {
             logger.debug(
               { chatJid, count: messagesToSend.length },
@@ -431,7 +508,15 @@ async function startMessageLoop(): Promise<void> {
                 logger.warn({ chatJid, err }, 'Failed to set typing indicator'),
               );
           } else {
-            // No active container — enqueue for a new one
+            // No active container — send immediate acknowledgment before cold-starting
+            channel
+              .sendMessage(chatJid, '⏳')
+              .catch((err) =>
+                logger.warn(
+                  { chatJid, err },
+                  'Failed to send working-on-it acknowledgment',
+                ),
+              );
             queue.enqueueMessageCheck(chatJid);
           }
         }
@@ -538,8 +623,21 @@ async function main(): Promise<void> {
   // Channel callbacks (shared by all channels)
   const channelOpts = {
     onMessage: (chatJid: string, msg: NewMessage) => {
-      // Remote control commands — intercept before storage
+      // Orchestrator commands — intercept before storage, zero token cost
       const trimmed = msg.content.trim();
+      if (trimmed === '/reset') {
+        const group = registeredGroups[chatJid];
+        const channel = findChannel(channels, chatJid);
+        if (group && channel) {
+          sessions[group.folder] = '';
+          setSession(group.folder, '');
+          logger.info({ group: group.name }, 'Session manually reset via /reset');
+          channel
+            .sendMessage(chatJid, '🔄 Session reset. Starting fresh!')
+            .catch((err) => logger.warn({ err, chatJid }, 'Failed to send reset confirmation'));
+        }
+        return;
+      }
       if (trimmed === '/remote-control' || trimmed === '/remote-control-end') {
         handleRemoteControl(trimmed, chatJid, msg).catch((err) =>
           logger.error({ err, chatJid }, 'Remote control command error'),

@@ -171,6 +171,7 @@ function buildVolumeMounts(
   fs.mkdirSync(path.join(groupIpcDir, 'tasks'), { recursive: true });
   fs.mkdirSync(path.join(groupIpcDir, 'tv'), { recursive: true });
   fs.mkdirSync(path.join(groupIpcDir, 'input'), { recursive: true });
+  fs.mkdirSync(path.join(groupIpcDir, 'vibe'), { recursive: true });
   mounts.push({
     hostPath: groupIpcDir,
     containerPath: '/workspace/ipc',
@@ -198,6 +199,20 @@ function buildVolumeMounts(
   mounts.push({
     hostPath: groupAgentRunnerDir,
     containerPath: '/app/src',
+    readonly: false,
+  });
+
+  // Persist compiled agent-runner dist across container runs to skip recompile
+  const groupAgentRunnerDistDir = path.join(
+    DATA_DIR,
+    'sessions',
+    group.folder,
+    'agent-runner-dist',
+  );
+  fs.mkdirSync(groupAgentRunnerDistDir, { recursive: true });
+  mounts.push({
+    hostPath: groupAgentRunnerDistDir,
+    containerPath: '/tmp/dist',
     readonly: false,
   });
 
