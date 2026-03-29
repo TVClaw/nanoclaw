@@ -63,7 +63,9 @@ export const IPC_POLL_INTERVAL = 1000;
 // Default 5 — each request is essentially stateless, keeping costs minimal.
 // Set to 0 to disable.
 export const SESSION_IDLE_RESET_MINUTES = parseFloat(
-  envConfig.SESSION_IDLE_RESET_MINUTES || process.env.SESSION_IDLE_RESET_MINUTES || '5',
+  envConfig.SESSION_IDLE_RESET_MINUTES ||
+    process.env.SESSION_IDLE_RESET_MINUTES ||
+    '5',
 );
 export const IDLE_TIMEOUT = parseInt(process.env.IDLE_TIMEOUT || '1800000', 10); // 30min default — how long to keep container alive after last result
 export const MAX_CONCURRENT_CONTAINERS = Math.max(

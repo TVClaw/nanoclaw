@@ -223,7 +223,10 @@ export function startIpcWatcher(deps: IpcDeps): void {
             }
           }
         } catch (err) {
-          logger.error({ err, sourceGroup }, 'Error reading IPC vibe directory');
+          logger.error(
+            { err, sourceGroup },
+            'Error reading IPC vibe directory',
+          );
         }
       }
 

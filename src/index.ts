@@ -61,7 +61,10 @@ import {
 import { startSchedulerLoop } from './task-scheduler.js';
 import { createTvOnlyPlaceholderChannel } from './channels/tvclaw-tv-only.js';
 import { getTvManager } from './services/tv-manager.js';
-import { generateVibePageDirect, isVibePageRequest } from './services/vibe-generator.js';
+import {
+  generateVibePageDirect,
+  isVibePageRequest,
+} from './services/vibe-generator.js';
 import { Channel, NewMessage, RegisteredGroup } from './types.js';
 import { logger } from './logger.js';
 
@@ -246,7 +249,10 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
             getTvManager().sendToAll({ action: 'OPEN_URL', params: { url } });
             logger.info({ group: group.name }, 'Inline vibe page sent to TV');
           } catch (err) {
-            logger.error({ err, group: group.name }, 'Failed to host inline vibe page');
+            logger.error(
+              { err, group: group.name },
+              'Failed to host inline vibe page',
+            );
           }
         }
       }
@@ -463,7 +469,10 @@ async function startMessageLoop(): Promise<void> {
               channel
                 .sendMessage(chatJid, '⏳')
                 .catch((err) =>
-                  logger.warn({ chatJid, err }, 'Failed to send vibe acknowledgment'),
+                  logger.warn(
+                    { chatJid, err },
+                    'Failed to send vibe acknowledgment',
+                  ),
                 );
               (async () => {
                 channel.setTyping?.(chatJid, true)?.catch(() => {});
@@ -474,7 +483,10 @@ async function startMessageLoop(): Promise<void> {
                   const result = await generateVibePageDirect(cleanMsg);
                   if (result?.html) {
                     const url = getTvManager().addVibePage(result.html);
-                    getTvManager().sendToAll({ action: 'OPEN_URL', params: { url } });
+                    getTvManager().sendToAll({
+                      action: 'OPEN_URL',
+                      params: { url },
+                    });
                   }
                   if (result?.text) {
                     await channel.sendMessage(chatJid, result.text);
@@ -483,7 +495,10 @@ async function startMessageLoop(): Promise<void> {
                     queue.enqueueMessageCheck(chatJid);
                   }
                 } catch (err) {
-                  logger.error({ err, chatJid }, 'Fast vibe path failed, falling back to container');
+                  logger.error(
+                    { err, chatJid },
+                    'Fast vibe path failed, falling back to container',
+                  );
                   queue.enqueueMessageCheck(chatJid);
                 } finally {
                   channel.setTyping?.(chatJid, false)?.catch(() => {});
@@ -631,10 +646,18 @@ async function main(): Promise<void> {
         if (group && channel) {
           sessions[group.folder] = '';
           setSession(group.folder, '');
-          logger.info({ group: group.name }, 'Session manually reset via /reset');
+          logger.info(
+            { group: group.name },
+            'Session manually reset via /reset',
+          );
           channel
             .sendMessage(chatJid, '🔄 Session reset. Starting fresh!')
-            .catch((err) => logger.warn({ err, chatJid }, 'Failed to send reset confirmation'));
+            .catch((err) =>
+              logger.warn(
+                { err, chatJid },
+                'Failed to send reset confirmation',
+              ),
+            );
         }
         return;
       }

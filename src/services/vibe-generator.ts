@@ -62,7 +62,10 @@ export async function generateVibePageDirect(
 
     if (!res.ok) {
       const errText = await res.text().catch(() => '');
-      logger.error({ status: res.status, body: errText }, 'Vibe generator API error');
+      logger.error(
+        { status: res.status, body: errText },
+        'Vibe generator API error',
+      );
       return null;
     }
 
@@ -82,7 +85,10 @@ export async function generateVibePageDirect(
       .replace(/<internal>[\s\S]*?<\/internal>/g, '')
       .trim();
 
-    logger.info({ model, hasHtml: !!html, textLen: text.length }, 'Vibe generator response');
+    logger.info(
+      { model, hasHtml: !!html, textLen: text.length },
+      'Vibe generator response',
+    );
     return { html, text };
   } catch (err) {
     logger.error({ err }, 'Vibe generator failed');
