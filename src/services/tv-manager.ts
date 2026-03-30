@@ -510,22 +510,39 @@ export class TvManager {
       // DPAD relay: Android accessibility service POSTs here
       if (req.method === 'POST' && pathname === '/vibe-key') {
         const chunks: Buffer[] = [];
-        req.on('data', (c) => { chunks.push(c as Buffer); });
+        req.on('data', (c) => {
+          chunks.push(c as Buffer);
+        });
         req.on('end', () => {
           try {
-            const body = JSON.parse(Buffer.concat(chunks).toString('utf8')) as { dir?: string };
+            const body = JSON.parse(Buffer.concat(chunks).toString('utf8')) as {
+              dir?: string;
+            };
             const dir = body.dir;
-            if (dir === 'up' || dir === 'down' || dir === 'left' || dir === 'right') {
+            if (
+              dir === 'up' ||
+              dir === 'down' ||
+              dir === 'left' ||
+              dir === 'right'
+            ) {
               const data = `data: ${dir}\n\n`;
               for (const client of vibeKeySseClients) {
-                try { client.write(data); } catch { vibeKeySseClients.delete(client); }
+                try {
+                  client.write(data);
+                } catch {
+                  vibeKeySseClients.delete(client);
+                }
               }
-              logger.debug({ dir, sseClients: vibeKeySseClients.size }, 'vibe-key relayed');
+              logger.debug(
+                { dir, sseClients: vibeKeySseClients.size },
+                'vibe-key relayed',
+              );
             }
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ ok: true }));
           } catch {
-            res.writeHead(400); res.end();
+            res.writeHead(400);
+            res.end();
           }
         });
         return;
@@ -536,15 +553,21 @@ export class TvManager {
         res.writeHead(200, {
           'Content-Type': 'text/event-stream',
           'Cache-Control': 'no-cache',
-          'Connection': 'keep-alive',
+          Connection: 'keep-alive',
           'Access-Control-Allow-Origin': '*',
         });
         res.write('retry: 2000\n\n');
         vibeKeySseClients.add(res);
-        logger.debug({ sseClients: vibeKeySseClients.size }, 'vibe-key-sse client connected');
+        logger.debug(
+          { sseClients: vibeKeySseClients.size },
+          'vibe-key-sse client connected',
+        );
         req.on('close', () => {
           vibeKeySseClients.delete(res);
-          logger.debug({ sseClients: vibeKeySseClients.size }, 'vibe-key-sse client disconnected');
+          logger.debug(
+            { sseClients: vibeKeySseClients.size },
+            'vibe-key-sse client disconnected',
+          );
         });
         return;
       }

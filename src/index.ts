@@ -466,7 +466,9 @@ async function startMessageLoop(): Promise<void> {
               .pop();
             if (lastUserMsg && isVibePageRequest(lastUserMsg.content)) {
               const vibeTimer = perfStart(`vibe [${chatJid.slice(0, 8)}]`);
-              perfStep(vibeTimer, 'request detected', { msg: lastUserMsg.content.slice(0, 60) });
+              perfStep(vibeTimer, 'request detected', {
+                msg: lastUserMsg.content.slice(0, 60),
+              });
               lastAgentTimestamp[chatJid] =
                 messagesToSend[messagesToSend.length - 1].timestamp;
               saveState();
@@ -487,7 +489,10 @@ async function startMessageLoop(): Promise<void> {
                     .trim();
                   perfStep(vibeTimer, 'calling generateVibePageDirect');
                   const result = await generateVibePageDirect(cleanMsg);
-                  perfStep(vibeTimer, 'generateVibePageDirect returned', { hasHtml: !!result?.html, hasText: !!result?.text });
+                  perfStep(vibeTimer, 'generateVibePageDirect returned', {
+                    hasHtml: !!result?.html,
+                    hasText: !!result?.text,
+                  });
                   if (result?.html) {
                     const url = getTvManager().addVibePage(result.html);
                     perfStep(vibeTimer, 'html hosted', { url });
@@ -502,7 +507,10 @@ async function startMessageLoop(): Promise<void> {
                     perfStep(vibeTimer, 'text reply sent');
                   } else if (!result?.html) {
                     // Nothing useful — fall back to container
-                    perfStep(vibeTimer, 'no result — falling back to container');
+                    perfStep(
+                      vibeTimer,
+                      'no result — falling back to container',
+                    );
                     queue.enqueueMessageCheck(chatJid);
                   }
                   perfEnd(vibeTimer);
@@ -522,9 +530,14 @@ async function startMessageLoop(): Promise<void> {
             }
           }
 
-          const containerTimer = perfStart(`container [${chatJid.slice(0, 8)}]`);
+          const containerTimer = perfStart(
+            `container [${chatJid.slice(0, 8)}]`,
+          );
           perfStep(containerTimer, 'fast-path miss — routing to container', {
-            msg: messagesToSend[messagesToSend.length - 1]?.content?.slice(0, 60),
+            msg: messagesToSend[messagesToSend.length - 1]?.content?.slice(
+              0,
+              60,
+            ),
           });
           if (queue.sendMessage(chatJid, formatted)) {
             logger.debug(
@@ -555,7 +568,9 @@ async function startMessageLoop(): Promise<void> {
             perfStep(containerTimer, 'ack sent — enqueuing');
             queue.enqueueMessageCheck(chatJid);
             // Note: container completion is async; total time visible in INFO logs above
-            perfEnd(containerTimer, { note: 'container running async — see INFO logs for completion time' });
+            perfEnd(containerTimer, {
+              note: 'container running async — see INFO logs for completion time',
+            });
           }
         }
       }

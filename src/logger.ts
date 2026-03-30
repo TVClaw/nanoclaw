@@ -15,7 +15,11 @@ const VERBOSE = process.argv.includes('--verbose');
  *   perfEnd(t, 'my-label');        // prints elapsed ms
  *   perfStep(t, 'my-label', 'checkpoint'); // prints ms since last call
  */
-export function perfStart(label: string): { t0: number; last: number; label: string } {
+export function perfStart(label: string): {
+  t0: number;
+  last: number;
+  label: string;
+} {
   const now = Date.now();
   if (VERBOSE) console.log(`[PERF] ▶ ${label} started`);
   return { t0: now, last: now, label };
@@ -32,7 +36,9 @@ export function perfStep(
   const sinceLast = now - timer.last;
   timer.last = now;
   const extraStr = extra ? ' ' + JSON.stringify(extra) : '';
-  console.log(`[PERF] ${timer.label} › ${step} +${sinceLast}ms (total ${sinceStart}ms)${extraStr}`);
+  console.log(
+    `[PERF] ${timer.label} › ${step} +${sinceLast}ms (total ${sinceStart}ms)${extraStr}`,
+  );
 }
 
 export function perfEnd(

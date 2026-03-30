@@ -24,8 +24,7 @@ export const NANOCLAW_MODEL =
 // Vibe pages always use the cheapest model — override with VIBE_MODEL if needed.
 // Intentionally NOT inheriting NANOCLAW_MODEL so upgrading the main agent model
 // doesn't silently make every vibe page 10-40x more expensive.
-export const VIBE_MODEL =
-  process.env.VIBE_MODEL || 'claude-haiku-4-5-20251001';
+export const VIBE_MODEL = process.env.VIBE_MODEL || 'claude-haiku-4-5-20251001';
 export const POLL_INTERVAL = 2000;
 export const SCHEDULER_POLL_INTERVAL = 60000;
 

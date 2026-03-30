@@ -26,9 +26,13 @@ export interface VibeResult {
 export function isVibePageRequest(message: string): boolean {
   return (
     // Explicit TV surface words: "vibe", "tv page", "on tv", "on my tv", "on the tv", "for tv"
-    /\bvibe\b|\btv\s+page\b|\b(on|for)\s+(my\s+|the\s+)?tv\b|\b(on|for)\s+(my\s+|the\s+)?television\b|\b(on|for)\s+(my\s+|the\s+)?(screen|display)\b/i.test(message) ||
+    /\bvibe\b|\btv\s+page\b|\b(on|for)\s+(my\s+|the\s+)?tv\b|\b(on|for)\s+(my\s+|the\s+)?television\b|\b(on|for)\s+(my\s+|the\s+)?(screen|display)\b/i.test(
+      message,
+    ) ||
     // Action verbs directed at TV: "show/display/put/play/open/run/launch/create/generate ... tv"
-    /(show|display|put|play|open|run|launch|create|generate|render|stream).{0,60}(tv|television|screen|display)/i.test(message)
+    /(show|display|put|play|open|run|launch|create|generate|render|stream).{0,60}(tv|television|screen|display)/i.test(
+      message,
+    )
   );
 }
 
@@ -98,14 +102,18 @@ export async function generateVibePageDirect(
     // Token usage + cost estimate (Haiku: $0.80/MTok in, $4.00/MTok out)
     const tokIn = data.usage?.input_tokens ?? 0;
     const tokOut = data.usage?.output_tokens ?? 0;
-    const costUsd = (tokIn * 0.0000008) + (tokOut * 0.000004);
+    const costUsd = tokIn * 0.0000008 + tokOut * 0.000004;
     const costLine = `in=${tokIn} out=${tokOut} cost=$${costUsd.toFixed(5)}`;
 
     logger.info(
       { model, hasHtml: !!html, tokIn, tokOut, costUsd: costUsd.toFixed(5) },
       'Vibe generator response',
     );
-    perfEnd(apiTimer, { hasHtml: !!html, htmlBytes: html?.length ?? 0, tokens: costLine });
+    perfEnd(apiTimer, {
+      hasHtml: !!html,
+      htmlBytes: html?.length ?? 0,
+      tokens: costLine,
+    });
     return { html, text };
   } catch (err) {
     logger.error({ err }, 'Vibe generator failed');
