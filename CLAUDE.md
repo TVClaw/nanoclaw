@@ -70,7 +70,8 @@ To show anything on the TV (news, games, stats, weather, etc.), output the HTML 
 - Search only for live data (scores, prices, breaking news). Use training data otherwise. One search max.
 - `body`: `margin:0;width:100vw;height:100vh;overflow:hidden;background:#0a0a0f;color:#fff`. Font ≥32px.
 - **Scrollable content**: wrap in `<div id="sc" style="height:100vh;overflow-y:auto;scrollbar-width:none">`, scroll it with `window.addEventListener('keydown',handler,true)` — `true` (capture phase) is mandatory on Android TV.
-- **Games**: `window.addEventListener('keydown',handler,true)` + `canvas.tabIndex=0;canvas.focus()` on load + `e.preventDefault();e.stopPropagation()` on arrow keys unconditionally. Show a `<button>` for restart, don't rely on Enter.
+- **Games**: DPAD input arrives via SSE relay. Connect: `const es=new EventSource('http://'+window.location.host+'/vibe-key-sse'); es.onmessage=e=>handleDir(e.data.trim());`. Each message data is `"up"/"down"/"left"/"right"`. Any direction starts/restarts the game. Also add keyboard fallback with `window.addEventListener('keydown',handler,true)`. Only element in body: `<canvas tabindex="0">`. Call `canvas.focus()` on load. Draw ALL UI (start screen, score, game over) on canvas — no HTML buttons or overlays.
+- **App deep links**: NEVER use `http://` or `https://` URLs to open apps (Netflix, YouTube, etc.) — Android TV browsers block these as "App deeplink blocked". Always use the Android `intent://` URI scheme: `intent://www.netflix.com/watch/ID#Intent;scheme=https;package=com.netflix.ninja;S.browser_fallback_url=https%3A%2F%2Fwww.netflix.com%2Fwatch%2FID;end`. Common packages: Netflix=`com.netflix.ninja`, YouTube=`com.google.android.youtube.tv`, Prime Video=`com.amazon.amazonvideo.livingroom`.
 
 ## Container Build Cache
 

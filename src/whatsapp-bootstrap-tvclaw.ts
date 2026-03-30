@@ -38,6 +38,25 @@ function findGroupBySubject(
   return undefined;
 }
 
+async function setGroupIcon(
+  sock: ReturnType<typeof makeWASocket>,
+  groupJid: string,
+): Promise<void> {
+  const logoPath = path.resolve('./assets/TvClaw_logo.png');
+  if (!fs.existsSync(logoPath)) {
+    console.warn('TVClaw logo not found at', logoPath, '— skipping group icon');
+    return;
+  }
+  try {
+    const imageBuffer = fs.readFileSync(logoPath);
+    await sock.updateProfilePicture(groupJid, imageBuffer);
+    console.log('Group icon set to TVClaw logo');
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(`Could not set group icon: ${msg}`);
+  }
+}
+
 async function ensureTvclawGroup(
   sock: ReturnType<typeof makeWASocket>,
 ): Promise<string> {
@@ -66,6 +85,7 @@ async function ensureTvclawGroup(
   }
 
   console.log(`Created group "${groupName}": ${meta.id}`);
+  await setGroupIcon(sock, meta.id);
   return meta.id;
 }
 
