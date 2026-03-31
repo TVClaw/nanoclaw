@@ -4,15 +4,17 @@ import { fileURLToPath } from 'node:url';
 
 export const GAMES_DIR = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
-  '..', '..', 'games',
+  '..',
+  '..',
+  'games',
 );
 
 /** Returns list of available built-in game names (without .html). */
 export function listGames(): string[] {
   if (!existsSync(GAMES_DIR)) return [];
   return readdirSync(GAMES_DIR)
-    .filter(f => f.endsWith('.html'))
-    .map(f => f.replace('.html', ''));
+    .filter((f) => f.endsWith('.html'))
+    .map((f) => f.replace('.html', ''));
 }
 
 /**

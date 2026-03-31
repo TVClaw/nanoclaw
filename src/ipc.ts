@@ -235,7 +235,9 @@ export function startIpcWatcher(deps: IpcDeps): void {
       // Process check_game requests — synchronous response written back to container
       try {
         if (fs.existsSync(gamesDir)) {
-          const gameFiles = fs.readdirSync(gamesDir).filter((f) => f.endsWith('.json'));
+          const gameFiles = fs
+            .readdirSync(gamesDir)
+            .filter((f) => f.endsWith('.json'));
           for (const file of gameFiles) {
             const filePath = path.join(gamesDir, file);
             try {
@@ -253,14 +255,24 @@ export function startIpcWatcher(deps: IpcDeps): void {
                       remote_url: `${shareBase}/keypad`,
                     }
                   : { exists: false, requested: data.name };
-                const responsePath = path.join(gamesDir, 'responses', `${data.requestId}.json`);
+                const responsePath = path.join(
+                  gamesDir,
+                  'responses',
+                  `${data.requestId}.json`,
+                );
                 fs.mkdirSync(path.dirname(responsePath), { recursive: true });
                 fs.writeFileSync(responsePath, JSON.stringify(response));
-                logger.info({ sourceGroup, match, name: data.name }, 'check_game resolved');
+                logger.info(
+                  { sourceGroup, match, name: data.name },
+                  'check_game resolved',
+                );
               }
               fs.unlinkSync(filePath);
             } catch (err) {
-              logger.error({ file, sourceGroup, err }, 'Error processing check_game IPC');
+              logger.error(
+                { file, sourceGroup, err },
+                'Error processing check_game IPC',
+              );
               fs.unlinkSync(filePath);
             }
           }

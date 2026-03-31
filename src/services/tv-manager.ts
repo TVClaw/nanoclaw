@@ -191,7 +191,11 @@ export class TvManager {
 
   private getVibePageHtml(pageId: string): string | null {
     // Prevent path traversal: only allow UUID.html or simple alphanumeric filenames
-    if (!/^[0-9a-f-]{36}\.html$/.test(pageId) && !/^[a-zA-Z0-9_-]+\.html$/.test(pageId)) return null;
+    if (
+      !/^[0-9a-f-]{36}\.html$/.test(pageId) &&
+      !/^[a-zA-Z0-9_-]+\.html$/.test(pageId)
+    )
+      return null;
     const filePath = path.join(this.vibesDir, pageId);
     if (!existsSync(filePath)) return null;
     try {
@@ -281,7 +285,7 @@ export class TvManager {
 
   openGame(name: string): string | null {
     const games = listGames();
-    const match = games.find(g => g.toLowerCase() === name.toLowerCase());
+    const match = games.find((g) => g.toLowerCase() === name.toLowerCase());
     if (!match) return null;
     const ip = preferredLanIPv4() ?? 'localhost';
     const httpPort = Number(process.env.TVCLAW_HTTP_PORT ?? 8770);
@@ -548,7 +552,19 @@ export class TvManager {
               dir?: string;
             };
             const dir = body.dir;
-            const VALID_DIRS = new Set(['up','down','left','right','ok','a','b','x','y','start','select']);
+            const VALID_DIRS = new Set([
+              'up',
+              'down',
+              'left',
+              'right',
+              'ok',
+              'a',
+              'b',
+              'x',
+              'y',
+              'start',
+              'select',
+            ]);
             if (dir && VALID_DIRS.has(dir)) {
               const data = `data: ${dir}\n\n`;
               for (const client of vibeKeySseClients) {
@@ -600,19 +616,43 @@ export class TvManager {
       // Phone game remote control UI
       if (read && pathname === '/keypad') {
         const htmlPath = path.join(STATIC_DIR, 'keypad.html');
-        if (!existsSync(htmlPath)) { res.writeHead(404); res.end(); return; }
+        if (!existsSync(htmlPath)) {
+          res.writeHead(404);
+          res.end();
+          return;
+        }
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-        if (m === 'HEAD') { res.end(); return; }
-        createReadStream(htmlPath).pipe(res).on('error', () => { if (!res.headersSent) res.writeHead(500); res.end(); });
+        if (m === 'HEAD') {
+          res.end();
+          return;
+        }
+        createReadStream(htmlPath)
+          .pipe(res)
+          .on('error', () => {
+            if (!res.headersSent) res.writeHead(500);
+            res.end();
+          });
         return;
       }
 
       // TVClaw logo for the remote page
       if (read && pathname === '/tvclaw-logo.png') {
-        if (!existsSync(LOGO_PATH)) { res.writeHead(404); res.end(); return; }
+        if (!existsSync(LOGO_PATH)) {
+          res.writeHead(404);
+          res.end();
+          return;
+        }
         res.writeHead(200, { 'Content-Type': 'image/png' });
-        if (m === 'HEAD') { res.end(); return; }
-        createReadStream(LOGO_PATH).pipe(res).on('error', () => { if (!res.headersSent) res.writeHead(500); res.end(); });
+        if (m === 'HEAD') {
+          res.end();
+          return;
+        }
+        createReadStream(LOGO_PATH)
+          .pipe(res)
+          .on('error', () => {
+            if (!res.headersSent) res.writeHead(500);
+            res.end();
+          });
         return;
       }
 
@@ -620,10 +660,22 @@ export class TvManager {
       const gameMatch = /^\/games\/([a-zA-Z0-9_-]+\.html)$/.exec(pathname);
       if (read && gameMatch) {
         const gamePath = path.join(GAMES_DIR, gameMatch[1] ?? '');
-        if (!existsSync(gamePath)) { res.writeHead(404); res.end(); return; }
+        if (!existsSync(gamePath)) {
+          res.writeHead(404);
+          res.end();
+          return;
+        }
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-        if (m === 'HEAD') { res.end(); return; }
-        createReadStream(gamePath).pipe(res).on('error', () => { if (!res.headersSent) res.writeHead(500); res.end(); });
+        if (m === 'HEAD') {
+          res.end();
+          return;
+        }
+        createReadStream(gamePath)
+          .pipe(res)
+          .on('error', () => {
+            if (!res.headersSent) res.writeHead(500);
+            res.end();
+          });
         return;
       }
 
@@ -690,9 +742,19 @@ export class TvManager {
   }
 }
 
-const STATIC_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'static');
-const LOGO_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'assets', 'TvClaw_logo_small.png');
-
+const STATIC_DIR = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '..',
+  '..',
+  'static',
+);
+const LOGO_PATH = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '..',
+  '..',
+  'assets',
+  'TvClaw_logo_small.png',
+);
 
 let singleton: TvManager | null = null;
 
