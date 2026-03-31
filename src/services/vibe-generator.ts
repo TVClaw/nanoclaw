@@ -6,6 +6,7 @@
 import { CREDENTIAL_PROXY_PORT, VIBE_MODEL } from '../config.js';
 import { detectAuthMode } from '../credential-proxy.js';
 import { logger, perfStart, perfStep, perfEnd } from '../logger.js';
+import { matchBuiltinGame } from './games.js';
 
 const SYSTEM_PROMPT = `You generate web pages for TV display. Output complete HTML inside <vibe-page> tags, then one short line for the user. Be minimal — only as complex as the request needs.
 
@@ -24,6 +25,8 @@ export interface VibeResult {
 
 /** Returns true if the message is asking for something to be shown on the TV. */
 export function isVibePageRequest(message: string): boolean {
+  if (matchBuiltinGame(message)) return false;
+
   return (
     // Explicit TV surface words: "vibe", "tv page", "on tv", "on my tv", "on the tv", "for tv"
     /\bvibe\b|\btv\s+page\b|\b(on|for)\s+(my\s+|the\s+)?tv\b|\b(on|for)\s+(my\s+|the\s+)?television\b|\b(on|for)\s+(my\s+|the\s+)?(screen|display)\b/i.test(

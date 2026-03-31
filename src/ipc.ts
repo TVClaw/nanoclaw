@@ -9,6 +9,7 @@ import { createTask, deleteTask, getTaskById, updateTask } from './db.js';
 import { isValidGroupFolder } from './group-folder.js';
 import { logger } from './logger.js';
 import { getTvManager, parseTvHttpPayload } from './services/tv-manager.js';
+import { matchBuiltinGame } from './services/games.js';
 import { RegisteredGroup } from './types.js';
 
 export interface IpcDeps {
@@ -66,6 +67,7 @@ export function startIpcWatcher(deps: IpcDeps): void {
       const tasksDir = path.join(ipcBaseDir, sourceGroup, 'tasks');
       const tvDir = path.join(ipcBaseDir, sourceGroup, 'tv');
       const vibeDir = path.join(ipcBaseDir, sourceGroup, 'vibe');
+      const gamesDir = path.join(ipcBaseDir, sourceGroup, 'games');
 
       // Process messages from this group's IPC directory
       try {
@@ -228,6 +230,43 @@ export function startIpcWatcher(deps: IpcDeps): void {
             'Error reading IPC vibe directory',
           );
         }
+      }
+
+      // Process check_game requests — synchronous response written back to container
+      try {
+        if (fs.existsSync(gamesDir)) {
+          const gameFiles = fs.readdirSync(gamesDir).filter((f) => f.endsWith('.json'));
+          for (const file of gameFiles) {
+            const filePath = path.join(gamesDir, file);
+            try {
+              const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+              if (data.type === 'check_game' && data.requestId) {
+                const tvManager = getTvManager();
+                const lanBase = tvManager.getHttpBaseUrl();
+                const shareBase = tvManager.getPublicHttpBaseUrl();
+                const match = data.name ? matchBuiltinGame(data.name) : null;
+                const response = match
+                  ? {
+                      exists: true,
+                      game: match,
+                      url: `${lanBase}/games/${match}.html`,
+                      remote_url: `${shareBase}/keypad`,
+                    }
+                  : { exists: false, requested: data.name };
+                const responsePath = path.join(gamesDir, 'responses', `${data.requestId}.json`);
+                fs.mkdirSync(path.dirname(responsePath), { recursive: true });
+                fs.writeFileSync(responsePath, JSON.stringify(response));
+                logger.info({ sourceGroup, match, name: data.name }, 'check_game resolved');
+              }
+              fs.unlinkSync(filePath);
+            } catch (err) {
+              logger.error({ file, sourceGroup, err }, 'Error processing check_game IPC');
+              fs.unlinkSync(filePath);
+            }
+          }
+        }
+      } catch (err) {
+        logger.error({ err, sourceGroup }, 'Error reading IPC games directory');
       }
 
       // Process tasks from this group's IPC directory

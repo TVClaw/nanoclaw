@@ -61,10 +61,6 @@ import {
 import { startSchedulerLoop } from './task-scheduler.js';
 import { createTvOnlyPlaceholderChannel } from './channels/tvclaw-tv-only.js';
 import { getTvManager } from './services/tv-manager.js';
-import {
-  generateVibePageDirect,
-  isVibePageRequest,
-} from './services/vibe-generator.js';
 import { Channel, NewMessage, RegisteredGroup } from './types.js';
 import { logger, perfStart, perfStep, perfEnd } from './logger.js';
 
@@ -458,82 +454,10 @@ async function startMessageLoop(): Promise<void> {
             allPending.length > 0 ? allPending : groupMessages;
           const formatted = formatMessages(messagesToSend, TIMEZONE);
 
-          // Fast path: direct API call for vibe-page requests (~5-20s vs ~60-120s through container)
-          // Applies to all groups, not just isMain
-          {
-            const lastUserMsg = messagesToSend
-              .filter((m) => !m.is_from_me && !m.is_bot_message)
-              .pop();
-            if (lastUserMsg && isVibePageRequest(lastUserMsg.content)) {
-              const vibeTimer = perfStart(`vibe [${chatJid.slice(0, 8)}]`);
-              perfStep(vibeTimer, 'request detected', {
-                msg: lastUserMsg.content.slice(0, 60),
-              });
-              lastAgentTimestamp[chatJid] =
-                messagesToSend[messagesToSend.length - 1].timestamp;
-              saveState();
-              channel
-                .sendMessage(chatJid, '⏳')
-                .catch((err) =>
-                  logger.warn(
-                    { chatJid, err },
-                    'Failed to send vibe acknowledgment',
-                  ),
-                );
-              perfStep(vibeTimer, 'ack sent');
-              (async () => {
-                channel.setTyping?.(chatJid, true)?.catch(() => {});
-                try {
-                  const cleanMsg = lastUserMsg.content
-                    .replace(TRIGGER_PATTERN, '')
-                    .trim();
-                  perfStep(vibeTimer, 'calling generateVibePageDirect');
-                  const result = await generateVibePageDirect(cleanMsg);
-                  perfStep(vibeTimer, 'generateVibePageDirect returned', {
-                    hasHtml: !!result?.html,
-                    hasText: !!result?.text,
-                  });
-                  if (result?.html) {
-                    const url = getTvManager().addVibePage(result.html);
-                    perfStep(vibeTimer, 'html hosted', { url });
-                    getTvManager().sendToAll({
-                      action: 'OPEN_URL',
-                      params: { url },
-                    });
-                    perfStep(vibeTimer, 'OPEN_URL sent to TV');
-                  }
-                  if (result?.text) {
-                    await channel.sendMessage(chatJid, result.text);
-                    perfStep(vibeTimer, 'text reply sent');
-                  } else if (!result?.html) {
-                    // Nothing useful — fall back to container
-                    perfStep(
-                      vibeTimer,
-                      'no result — falling back to container',
-                    );
-                    queue.enqueueMessageCheck(chatJid);
-                  }
-                  perfEnd(vibeTimer);
-                } catch (err) {
-                  logger.error(
-                    { err, chatJid },
-                    'Fast vibe path failed, falling back to container',
-                  );
-                  perfStep(vibeTimer, 'ERROR — falling back to container');
-                  perfEnd(vibeTimer);
-                  queue.enqueueMessageCheck(chatJid);
-                } finally {
-                  channel.setTyping?.(chatJid, false)?.catch(() => {});
-                }
-              })();
-              continue;
-            }
-          }
-
           const containerTimer = perfStart(
             `container [${chatJid.slice(0, 8)}]`,
           );
-          perfStep(containerTimer, 'fast-path miss — routing to container', {
+          perfStep(containerTimer, 'routing to container', {
             msg: messagesToSend[messagesToSend.length - 1]?.content?.slice(
               0,
               60,

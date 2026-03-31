@@ -11,7 +11,12 @@ const envConfig = readEnvFile([
   'ASSISTANT_HAS_OWN_NUMBER',
   'NANOCLAW_MODEL',
   'SESSION_IDLE_RESET_MINUTES',
+  'TVCLAW_PUBLIC_HTTP_ORIGIN',
 ]);
+
+function normalizeHttpOrigin(raw: string): string {
+  return raw.trim().replace(/\/+$/, '');
+}
 
 export const ASSISTANT_NAME =
   envConfig.ASSISTANT_NAME || process.env.ASSISTANT_NAME || 'Andy';
@@ -20,6 +25,12 @@ export const ASSISTANT_HAS_OWN_NUMBER =
     process.env.ASSISTANT_HAS_OWN_NUMBER) === 'true';
 export const NANOCLAW_MODEL =
   envConfig.NANOCLAW_MODEL || process.env.NANOCLAW_MODEL || '';
+
+export const TVCLAW_PUBLIC_HTTP_ORIGIN = normalizeHttpOrigin(
+  envConfig.TVCLAW_PUBLIC_HTTP_ORIGIN ||
+    process.env.TVCLAW_PUBLIC_HTTP_ORIGIN ||
+    '',
+);
 
 // Vibe pages always use the cheapest model — override with VIBE_MODEL if needed.
 // Intentionally NOT inheriting NANOCLAW_MODEL so upgrading the main agent model

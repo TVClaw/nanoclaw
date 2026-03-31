@@ -255,6 +255,38 @@ server.registerTool(
   },
 );
 
+const GAMES_IPC_DIR = path.join(IPC_DIR, 'games');
+const CHECK_GAME_TIMEOUT_MS = 5_000;
+const CHECK_GAME_POLL_MS = 100;
+
+server.tool(
+  'check_game',
+  'Check if a built-in game is available before generating one. Returns the game URL and remote controller URL when found. Always call this first when the user wants to play a game — only generate a vibe-page if check_game returns exists=false.',
+  {
+    name: z.string().describe('Game name the user wants to play (e.g. "snake", "tetris")'),
+  },
+  async (args) => {
+    const requestId = `game-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const responsePath = path.join(GAMES_IPC_DIR, 'responses', `${requestId}.json`);
+
+    writeIpcFile(GAMES_IPC_DIR, { type: 'check_game', name: args.name, requestId });
+
+    const deadline = Date.now() + CHECK_GAME_TIMEOUT_MS;
+    while (Date.now() < deadline) {
+      await new Promise<void>((r) => setTimeout(r, CHECK_GAME_POLL_MS));
+      if (fs.existsSync(responsePath)) {
+        const result = JSON.parse(fs.readFileSync(responsePath, 'utf-8'));
+        fs.unlinkSync(responsePath);
+        return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
+      }
+    }
+
+    return {
+      content: [{ type: 'text' as const, text: JSON.stringify({ exists: false, error: 'timeout', requested: args.name }) }],
+    };
+  },
+);
+
 server.tool(
   'schedule_task',
   `Schedule a recurring or one-time task. The task will run as a full agent with access to all tools. Returns the task ID for future reference. To modify an existing task, use update_task instead.
